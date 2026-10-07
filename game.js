@@ -182,9 +182,9 @@
 
     // Checkpoints
     checkpoints = [
-      { x: 1425, y: 560, reached: false },
-      { x: 3000, y: 560, reached: false },
-      { x: 3890, y: 560, reached: false }
+      { x: 1550, y: 560, reached: false },
+      { x: 3060, y: 560, reached: false },
+      { x: 3940, y: 560, reached: false }
     ];
 
     buildExtras();
@@ -271,7 +271,12 @@
       { x: 1950, y: 380, type: "bell" }, { x: 4585, y: 375, type: "bell" }
     ].map(i => ({ ...i, taken: false }));
     const bank = [...QUIZ].sort(() => Math.random() - 0.5);
-    boards = [600, 1700, 2550, 3400].map((x, i) => ({ x, y: 566, w: 110, h: 84, q: bank[i], done: false }));
+    boards = [
+      { x: 1275, y: 566 },
+      { x: 2050, y: 566 },
+      { x: 2440, y: 436 },
+      { x: 4230, y: 416 }
+    ].map(({ x, y }, i) => ({ x, y, w: 110, h: 84, q: bank[i], done: false }));
     combo = 0; bellTimer = 0;
   }
 
