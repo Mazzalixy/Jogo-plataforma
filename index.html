@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Escola do Saber</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="game-shell">
+    <canvas id="gameCanvas" aria-label="Jogo de plataforma 2D"></canvas>
+
+    <section id="hud" aria-label="Placar">
+      <div class="hud-box"><span>PONTOS</span><strong id="score">0000</strong></div>
+      <div class="hud-box"><span>VIDAS</span><strong id="lives">♥ ♥ ♥</strong></div>
+      <div class="hud-box"><span>TEMPO</span><strong id="time">00:00</strong></div>
+    </section>
+
+    <div id="scorePopup" aria-live="polite"></div>
+
+    <section id="controls">
+      <div class="control-group">
+        <button class="control-btn" id="leftBtn" aria-label="Mover para esquerda">◀</button>
+        <button class="control-btn" id="rightBtn" aria-label="Mover para direita">▶</button>
+      </div>
+      <button class="control-btn jump" id="jumpBtn" aria-label="Pular">▲</button>
+    </section>
+
+    <section id="startScreen" class="overlay">
+      <div class="panel">
+        <div class="badge">ESCOLA DO SABER</div>
+        <h1>Missão do Aluno</h1>
+        <p>Chegue ao pátio final, colete as moedas, supere os desafios e prove que você é o melhor da turma.</p>
+        <div class="instructions">
+          <div><b>A / D</b> ou <b>← / →</b> para andar</div>
+          <div><b>W</b>, <b>↑</b> ou <b>Espaço</b> para pular</div>
+          <div>Pule em cima dos inimigos em sequência para fazer <b>combo</b>.</div>
+          <div>🍎 maçã = +1 vida · 🔔 sino = inimigos lentos · lousa = pergunta (teclas <b>1 2 3</b>)</div>
+        </div>
+        <div class="best-line">RECORDE: <b class="best">0000</b></div>
+        <button id="startBtn" class="main-btn">INICIAR AULA</button>
+      </div>
+    </section>
+
+    <section id="pauseScreen" class="overlay hidden">
+      <div class="panel small">
+        <div class="badge">PAUSADO</div>
+        <h2>Jogo pausado</h2>
+        <p>Pressione <b>P</b> ou o botão abaixo para continuar.</p>
+        <button id="resumeBtn" class="main-btn">CONTINUAR</button>
+      </div>
+    </section>
+
+    <section id="quizScreen" class="overlay hidden">
+      <div class="panel">
+        <div class="badge">LOUSA</div>
+        <h2 id="quizQ"></h2>
+        <div id="quizOpts"></div>
+        <p id="quizMsg"></p>
+      </div>
+    </section>
+
+    <section id="gameOverScreen" class="overlay hidden">
+      <div class="panel">
+        <div class="badge danger">GAME OVER</div>
+        <h2>Você ficou sem vidas</h2>
+        <p>As 3 vidas foram perdidas.</p>
+        <div class="final-stats">
+          <div><span>PONTUAÇÃO</span><strong id="overScore">0000</strong></div>
+          <div><span>TEMPO</span><strong id="overTime">00:00</strong></div>
+        </div>
+        <div class="best-line">RECORDE: <b class="best">0000</b></div>
+        <button id="restartBtn" class="main-btn">TENTAR NOVAMENTE</button>
+      </div>
+    </section>
+
+    <section id="winScreen" class="overlay hidden">
+      <div class="panel">
+        <div class="badge success">FASE CONCLUÍDA</div>
+        <h2>Você chegou ao final!</h2>
+        <p>Parabéns! Você completou a fase.</p>
+        <div class="final-stats">
+          <div><span>PONTUAÇÃO FINAL</span><strong id="winScore">0000</strong></div>
+          <div><span>TEMPO FINAL</span><strong id="winTime">00:00</strong></div>
+        </div>
+        <div id="winStars" aria-label="Nota"></div>
+        <div class="best-line">RECORDE: <b class="best">0000</b></div>
+        <button id="playAgainBtn" class="main-btn">JOGAR NOVAMENTE</button>
+      </div>
+    </section>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>
