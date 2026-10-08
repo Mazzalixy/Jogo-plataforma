@@ -14,6 +14,8 @@
       <div class="hud-box"><span>PONTOS</span><strong id="score">0000</strong></div>
       <div class="hud-box"><span>VIDAS</span><strong id="lives">♥ ♥ ♥</strong></div>
       <div class="hud-box"><span>TEMPO</span><strong id="time">00:00</strong></div>
+      <div class="hud-box objective-box"><span>MISSÃO</span><strong id="objective">MOEDAS 0/10</strong></div>
+      <div class="hud-box inventory-box"><span>ITEM Q</span><strong id="inventory">VAZIO</strong></div>
     </section>
 
     <div id="scorePopup" aria-live="polite"></div>
@@ -23,21 +25,34 @@
         <button class="control-btn" id="leftBtn" aria-label="Mover para esquerda">◀</button>
         <button class="control-btn" id="rightBtn" aria-label="Mover para direita">▶</button>
       </div>
+      <div class="control-group action-controls">
+        <button class="control-btn" id="interactBtn" aria-label="Interagir">E</button>
+        <button class="control-btn" id="itemBtn" aria-label="Usar item">Q</button>
+      </div>
       <button class="control-btn jump" id="jumpBtn" aria-label="Pular">▲</button>
     </section>
 
     <section id="startScreen" class="overlay">
-      <div class="panel">
+      <div class="panel start-panel">
         <div class="badge">ESCOLA DO SABER</div>
         <h1>Missão do Aluno</h1>
-        <p>Chegue ao pátio final, colete as moedas, supere os desafios e prove que você é o melhor da turma.</p>
+        <p>Escolha uma fase e leve sua equipe até o desafio final.</p>
+        <h2 class="menu-heading">MAPA DA ESCOLA</h2>
+        <div id="levelSelect" class="level-select" aria-label="Selecionar fase"></div>
+        <div class="setup-row">
+          <div class="setup-group">
+            <span class="setup-label">PERSONAGEM</span>
+            <div id="characterSelect" class="character-select"></div>
+          </div>
+          <label class="hard-toggle"><input id="hardMode" type="checkbox"> MODO DIFÍCIL</label>
+        </div>
         <div class="instructions">
           <div><b>A / D</b> ou <b>← / →</b> para andar</div>
           <div><b>W</b>, <b>↑</b> ou <b>Espaço</b> para pular</div>
-          <div>Pule em cima dos inimigos em sequência para fazer <b>combo</b>.</div>
-          <div>🍎 maçã = +1 vida · 🔔 sino = inimigos lentos · lousa = pergunta (teclas <b>1 2 3</b>)</div>
+          <div><b>E</b> interage · <b>Q</b> usa item · <b>P</b> pausa</div>
+          <div>Pise nos inimigos por cima e complete a missão da fase.</div>
         </div>
-        <div class="best-line">RECORDE: <b class="best">0000</b></div>
+        <div id="progressSummary" class="best-line"></div>
         <button id="startBtn" class="main-btn">INICIAR AULA</button>
       </div>
     </section>
@@ -48,6 +63,7 @@
         <h2>Jogo pausado</h2>
         <p>Pressione <b>P</b> ou o botão abaixo para continuar.</p>
         <button id="resumeBtn" class="main-btn">CONTINUAR</button>
+          <button id="pauseMapBtn" class="secondary-btn">VOLTAR AO MAPA</button>
       </div>
     </section>
 
@@ -63,8 +79,8 @@
     <section id="gameOverScreen" class="overlay hidden">
       <div class="panel">
         <div class="badge danger">GAME OVER</div>
-        <h2>Você ficou sem vidas</h2>
-        <p>As 3 vidas foram perdidas.</p>
+        <h2 id="overTitle">Você ficou sem vidas</h2>
+        <p id="overMessage">As vidas da equipe acabaram.</p>
         <div class="final-stats">
           <div><span>PONTUAÇÃO</span><strong id="overScore">0000</strong></div>
           <div><span>TEMPO</span><strong id="overTime">00:00</strong></div>
@@ -83,9 +99,14 @@
           <div><span>PONTUAÇÃO FINAL</span><strong id="winScore">0000</strong></div>
           <div><span>TEMPO FINAL</span><strong id="winTime">00:00</strong></div>
         </div>
+        <div id="winGrade" class="win-grade">A</div>
+        <p id="winMission" class="result-mission"></p>
+        <div id="finalSummary" class="final-summary"></div>
         <div id="winStars" aria-label="Nota"></div>
         <div class="best-line">RECORDE: <b class="best">0000</b></div>
-        <button id="playAgainBtn" class="main-btn">JOGAR NOVAMENTE</button>
+        <button id="nextLevelBtn" class="main-btn">PRÓXIMA FASE</button>
+        <button id="playAgainBtn" class="secondary-btn">REJOGAR FASE</button>
+        <button id="winMapBtn" class="secondary-btn">VOLTAR AO MAPA</button>
       </div>
     </section>
   </main>

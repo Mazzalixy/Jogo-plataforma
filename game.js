@@ -11,8 +11,18 @@
     start: document.getElementById("startScreen"),
     pause: document.getElementById("pauseScreen"),
     gameOver: document.getElementById("gameOverScreen"),
+    overTitle: document.getElementById("overTitle"),
+    overMessage: document.getElementById("overMessage"),
     win: document.getElementById("winScreen"),
     stars: document.getElementById("winStars"),
+    grade: document.getElementById("winGrade"),
+    mission: document.getElementById("winMission"),
+    finalSummary: document.getElementById("finalSummary"),
+    objective: document.getElementById("objective"),
+    inventory: document.getElementById("inventory"),
+    levelSelect: document.getElementById("levelSelect"),
+    characterSelect: document.getElementById("characterSelect"),
+    progressSummary: document.getElementById("progressSummary"),
     overScore: document.getElementById("overScore"),
     overTime: document.getElementById("overTime"),
     winScore: document.getElementById("winScore"),
@@ -22,16 +32,40 @@
   const keys = Object.create(null);
   const touch = { left: false, right: false };
 
+  const LEVELS = [
+    { name: "Sala de Aula", theme: "classroom", timeLimit: 120, targetCoins: 10 },
+    { name: "Corredor", theme: "corridor", timeLimit: 115, targetCoins: 12 },
+    { name: "Sala do Diretor", theme: "office", timeLimit: 110, targetCoins: 12 },
+    { name: "Laboratório", theme: "lab", timeLimit: 105, targetCoins: 13 },
+    { name: "Biblioteca", theme: "library", timeLimit: 105, targetCoins: 14 },
+    { name: "Pátio", theme: "yard", timeLimit: 100, targetCoins: 15 },
+    { name: "Desafio Final", theme: "final", timeLimit: 150, targetCoins: 12 }
+  ];
+  const CHARACTERS = [
+    { id: "atleta", name: "Atleta", speed: 5.8, jump: 13.2, lives: 3 },
+    { id: "inventora", name: "Inventora", speed: 5.1, jump: 14.1, lives: 3 },
+    { id: "monitor", name: "Monitor", speed: 4.8, jump: 13.2, lives: 4 }
+  ];
+  let levelIndex = 0;
+  let selectedLevel = 0;
+  let selectedCharacter = "atleta";
+  let hardMode = false;
+  let profile = { unlocked: 1, completed: [], stars: {}, records: {} };
+
   const WORLD = { width: 5200, height: 900 };
   const VIEW = { width: 1280, height: 720 };
 
   let scaleX = 1, scaleY = 1;
   let state = "menu";
+  let loopRunning = false;
   let lastTime = 0;
   let elapsed = 0;
+  let campaignTime = 0;
   let cameraX = 0;
   let score = 0;
+  let levelStartScore = 0;
   let lives = 3;
+  let maxLives = 3;
   let checkpointX = 160;
   let checkpointY = 580;
   let respawnTimer = 0;
@@ -47,6 +81,7 @@
     maxJumps: 2,
     jumpsUsed: 0,
     grounded: false,
+    standingOn: null,
     coyote: 0,
     jumpBuffer: 0,
     invincible: 0,
@@ -59,8 +94,17 @@
   let platforms = [];
   let hazards = [];
   let coins = [];
+  let collectibles = [];
+  let interactables = [];
+  let inventory = [];
+  let bagCapacity = 1;
+  let keysCollected = 0;
+  let coinCount = 0;
+  let mission = { damageTaken: false, books: 0, secrets: 0, medals: 0 };
+  let effects = { energy: 0, shoes: 0, shield: 0, star: 0, clock: 0 };
   let enemies = [];
   let checkpoints = [];
+  let boss = null;
   let goal = null;
   let particles = [];
 
@@ -94,7 +138,7 @@
   }
 
   function addPlatform(x, y, w, h = 42, type = "ground") {
-    platforms.push({ x, y, w, h, type });
+    platforms.push({ x, y, w, h, type, baseX: x, phase: Math.random() * 6, range: type === "moving" ? 100 : 0, active: false });
   }
 
   function addCoin(x, y) {
@@ -124,8 +168,17 @@
     platforms = [];
     hazards = [];
     coins = [];
+    collectibles = [];
+    interactables = [];
+    inventory = [];
+    bagCapacity = 1;
+    keysCollected = 0;
+    coinCount = 0;
+    mission = { damageTaken: false, books: 0, secrets: 0, medals: 0 };
+    effects = { energy: 0, shoes: 0, shield: 0, star: 0, clock: 0 };
     enemies = [];
     checkpoints = [];
+    boss = null;
     particles = [];
 
     // Chão e plataformas principais
@@ -148,16 +201,22 @@
     addPlatform(4150, 500, 190, 35, "floating");
     addPlatform(4500, 430, 170, 35, "floating");
     addPlatform(4780, 520, 160, 35, "floating");
+    if (levelIndex === 1) addPlatform(1390, 460, 150, 35, "moving");
+    if (levelIndex === 3) addPlatform(2800, 465, 155, 35, "moving");
+    if (levelIndex === 5) addPlatform(3640, 450, 170, 35, "moving");
+    if (levelIndex === 4) platforms.push({ x: 2970, y: 500, w: 150, h: 35, type: "secret", revealed: false });
 
-    // Obstáculos: espinhos, fogo, pedras e barreiras
-    addHazard(675, 620, 90, 30, "spikes");
-    addHazard(1095, 620, 105, 30, "fire");
-    addHazard(1390, 615, 100, 35, "spikes");
-    addHazard(2170, 620, 120, 30, "fire");
-    addHazard(2870, 610, 120, 40, "rock");
-    addHazard(3780, 615, 130, 35, "spikes");
-    addHazard(4335, 610, 100, 40, "barrier");
-    addHazard(4670, 620, 110, 30, "fire");
+    const hazardSets = [
+      [[675, 620, 90, 30, "spikes"], [1095, 620, 105, 30, "fire"], [1390, 615, 100, 35, "spikes"], [2170, 620, 120, 30, "fire"], [2870, 610, 120, 40, "rock"], [3780, 615, 130, 35, "spikes"], [4335, 610, 100, 40, "barrier"], [4670, 620, 110, 30, "fire"]],
+      [[650, 610, 100, 40, "barrier"], [1080, 620, 110, 30, "spikes"], [1710, 610, 105, 40, "barrier"], [2160, 620, 120, 30, "fire"], [2870, 610, 120, 40, "rock"], [3650, 620, 130, 30, "spikes"], [4335, 610, 100, 40, "barrier"]],
+      [[675, 610, 90, 40, "rock"], [1095, 620, 105, 30, "spikes"], [1710, 610, 110, 40, "barrier"], [2170, 620, 120, 30, "fire"], [2870, 610, 120, 40, "rock"], [3540, 610, 100, 40, "barrier"], [4335, 610, 100, 40, "barrier"]],
+      [[675, 620, 90, 30, "fire"], [1095, 610, 105, 40, "rock"], [1710, 620, 100, 30, "spikes"], [2170, 610, 120, 40, "fire"], [2870, 610, 120, 40, "rock"], [3780, 620, 130, 30, "fire"], [4335, 610, 100, 40, "barrier"]],
+      [[675, 620, 90, 30, "spikes"], [1095, 610, 105, 40, "rock"], [1710, 620, 110, 30, "spikes"], [2170, 620, 120, 30, "fire"], [2870, 610, 120, 40, "barrier"], [3780, 615, 130, 35, "spikes"], [4335, 610, 100, 40, "barrier"]],
+      [[650, 610, 120, 40, "rock"], [1095, 620, 105, 30, "fire"], [1710, 610, 110, 40, "barrier"], [2170, 620, 120, 30, "spikes"], [2870, 610, 120, 40, "rock"], [3650, 610, 130, 40, "barrier"], [4335, 610, 100, 40, "rock"], [4670, 620, 110, 30, "fire"]],
+      [[675, 620, 90, 30, "spikes"], [1095, 620, 105, 30, "fire"], [1710, 610, 110, 40, "barrier"], [2170, 610, 120, 40, "rock"], [2870, 620, 120, 30, "fire"], [3780, 610, 130, 40, "spikes"]]
+    ];
+    hazardSets[levelIndex].forEach(([x, y, w, h, type]) => addHazard(x, y, w, h, type));
+    if (hardMode) addHazard(4940, 620, 75, 30, "spikes");
 
     // Moedas distribuídas pela fase
     [
@@ -176,9 +235,20 @@
     addEnemy(3160, 608, 3050, 3750, 1.45, "#b94dff");
     addEnemy(4250, 608, 3970, 4520, 1.6, "#ff5d62");
 
+    if ([1, 3, 5].includes(levelIndex)) {
+      Object.assign(enemies[0], { type: "robot", color: "#55a9b5" });
+      Object.assign(enemies[4], { type: "inspector", color: "#a34a39" });
+    }
     Object.assign(enemies[1], { type: "eraser", color: "#f58ab0" });
     Object.assign(enemies[5], { type: "eraser", color: "#f58ab0" });
     Object.assign(enemies[3], { type: "ruler", color: "#f2c230", w: 76, h: 26, y: 624, baseY: 624 });
+
+    if (levelIndex === LEVELS.length - 1) {
+      enemies = [];
+      addEnemy(4650, 550, 4440, 4860, 1.1, "#a93d34", "boss");
+      Object.assign(enemies[0], { w: 92, h: 100, health: 3, attackTimer: 2 });
+      boss = enemies[0];
+    }
 
     // Checkpoints
     checkpoints = [
@@ -191,10 +261,18 @@
     goal = { x: 5060, y: 540, w: 48, h: 110 };
   }
 
-  function resetGame() {
+  function resetGame(keepRun = false) {
+    const previousScore = score;
+    const previousLives = lives;
+    if (!keepRun) campaignTime = 0;
     buildLevel();
-    score = 0;
-    lives = 3;
+    const character = CHARACTERS.find(item => item.id === selectedCharacter) || CHARACTERS[0];
+    player.speed = character.speed;
+    player.jump = character.jump;
+    maxLives = hardMode ? Math.max(1, character.lives - 1) : character.lives;
+    score = keepRun ? previousScore : 0;
+    levelStartScore = score;
+    lives = keepRun ? Math.min(previousLives, maxLives) : maxLives;
     elapsed = 0;
     cameraX = 0;
     checkpointX = 150;
@@ -213,6 +291,8 @@
     flashTimer = 0;
     shakeTimer = 0;
     finishBannerTimer = 0;
+    ui.overTitle.textContent = "Você ficou sem vidas";
+    ui.overMessage.textContent = "As vidas da equipe acabaram.";
     updateHud();
     hideAllOverlays();
   }
@@ -266,10 +346,33 @@
   const quizUi = { screen: document.getElementById("quizScreen"), q: document.getElementById("quizQ"), opts: document.getElementById("quizOpts"), msg: document.getElementById("quizMsg") };
 
   function buildExtras() {
-    items = [
-      { x: 1850, y: 585, type: "apple" }, { x: 3300, y: 585, type: "apple" },
-      { x: 1950, y: 380, type: "bell" }, { x: 4585, y: 375, type: "bell" }
-    ].map(i => ({ ...i, taken: false }));
+    const pickups = [
+      [{ x: 1850, y: 585, type: "jelly" }, { x: 1950, y: 380, type: "clock" }],
+      [{ x: 970, y: 435, type: "energy" }, { x: 1260, y: 355, type: "shoes" }],
+      [{ x: 1660, y: 435, type: "shield" }, { x: 3545, y: 345, type: "backpack" }],
+      [{ x: 1260, y: 355, type: "star" }, { x: 3270, y: 435, type: "energy" }],
+      [{ x: 1930, y: 365, type: "shoes" }, { x: 3545, y: 345, type: "jelly" }],
+      [{ x: 1950, y: 380, type: "clock" }, { x: 4210, y: 435, type: "shield" }],
+      [{ x: 2720, y: 365, type: "star" }, { x: 4585, y: 375, type: "backpack" }]
+    ];
+    items = pickups[levelIndex].map(item => ({ ...item, taken: false }));
+
+    const bookX = [555, 1260, 1930, 2720, 3270, 3545, 4820][levelIndex];
+    collectibles = [
+      { x: bookX, y: bookX === 555 ? 465 : 365, type: "book", collected: false },
+      { x: 4020, y: 585, type: "medal", collected: false },
+      { x: 3090, y: 585, type: "key", collected: false },
+      { x: 3010, y: 465, type: "secret", collected: false, hidden: levelIndex === 4 }
+    ];
+
+    const doorX = [930, 1640, 1880, 2390, 3140, 4020, 4335][levelIndex];
+    const door = { x: doorX, y: 520, w: 30, h: 130, type: "door", open: false };
+    const lever = { x: doorX - 85, y: 602, w: 26, h: 42, type: "lever", active: false, door };
+    const button = { x: doorX + 110, y: 610, w: 32, h: 32, type: "button", active: false };
+    const crate = { x: doorX + 175, y: 612, w: 38, h: 38, type: "crate" };
+    platforms.push(door, crate);
+    interactables = [lever, button, door, crate, { x: 3010, y: 455, w: 28, h: 38, type: "secret", active: false }];
+
     const bank = [...QUIZ].sort(() => Math.random() - 0.5);
     boards = [
       { x: 1275, y: 566 },
@@ -284,12 +387,68 @@
     for (const it of items) {
       if (it.taken) continue;
       if (!rectsOverlap(player, { x: it.x - 16, y: it.y - 16, w: 32, h: 32 })) continue;
-      it.taken = true; sfx.item();
-      burst(it.x, it.y, it.type === "apple" ? "#e03030" : "#ffd93b", 12);
-      if (it.type === "apple") {
-        if (lives < 3) { lives++; showScorePopup("MAÇÃ! +1 VIDA"); } else { score += 50; showScorePopup("MAÇÃ! = 50 PONTOS"); }
-      } else { bellTimer = 6; showScorePopup("SINO! INIMIGOS LENTOS"); }
+      if (it.type === "backpack") {
+        it.taken = true;
+        bagCapacity = 2;
+        showScorePopup("MOCHILA! 2 ESPAÇOS");
+      } else if (inventory.length < bagCapacity) {
+        it.taken = true;
+        inventory.push(it.type);
+        showScorePopup(`${itemName(it.type)}! PRESSIONE Q`);
+      } else {
+        showScorePopup("INVENTÁRIO CHEIO! PRESSIONE Q");
+      }
+      if (it.taken) { sfx.item(); burst(it.x, it.y, it.type === "jelly" ? "#e03030" : "#ffd93b", 12); }
     }
+  }
+
+  function itemName(type) {
+    return { jelly: "GELEIA", energy: "ENERGÉTICO", shoes: "TÊNIS", shield: "ESCUDO", star: "ESTRELA", clock: "RELÓGIO", backpack: "MOCHILA" }[type] || type.toUpperCase();
+  }
+
+  function useItem() {
+    if (state !== "playing" || inventory.length === 0) return;
+    const item = inventory.shift();
+    if (item === "jelly") lives = Math.min(maxLives, lives + 1);
+    if (item === "energy") effects.energy = 8;
+    if (item === "shoes") effects.shoes = 10;
+    if (item === "shield") effects.shield = 1;
+    if (item === "star") effects.star = 10;
+    if (item === "clock") effects.clock = 8;
+    sfx.item();
+    showScorePopup(item === "jelly" ? "VIDA RECUPERADA" : `${itemName(item)} ATIVADO`);
+    updateHud();
+  }
+
+  function interact() {
+    if (state !== "playing") return;
+    const px = player.x + player.w / 2;
+    const nearby = interactables
+      .filter(item => Math.abs(px - (item.x + item.w / 2)) < 90 && Math.abs(player.y - item.y) < 130)
+      .sort((a, b) => Math.abs(px - (a.x + a.w / 2)) - Math.abs(px - (b.x + b.w / 2)))[0];
+    if (!nearby) return;
+    if (nearby.type === "lever") {
+      nearby.active = !nearby.active;
+      nearby.door.open = nearby.active || keysCollected > 0;
+      showScorePopup(nearby.door.open ? "PORTA ABERTA" : "PORTA FECHADA");
+    } else if (nearby.type === "button") {
+      nearby.active = !nearby.active;
+      platforms.filter(platform => platform.type === "moving").forEach(platform => { platform.active = nearby.active; });
+      showScorePopup(nearby.active ? "PLATAFORMAS ATIVADAS" : "PLATAFORMAS PARADAS");
+    } else if (nearby.type === "door") {
+      if (keysCollected > 0) { nearby.open = true; keysCollected -= 1; showScorePopup("PORTA DESTRANCADA"); }
+      else showScorePopup("PRECISA DE UMA CHAVE");
+    } else if (nearby.type === "crate") {
+      nearby.x = clamp(nearby.x + player.facing * 48, 0, WORLD.width - nearby.w);
+      showScorePopup("CAIXA EMPURRADA");
+    } else if (nearby.type === "secret") {
+      nearby.active = true;
+      platforms.filter(platform => platform.type === "secret").forEach(platform => { platform.revealed = true; });
+      const secret = collectibles.find(item => item.type === "secret");
+      if (secret) secret.hidden = false;
+      showScorePopup("PASSAGEM SECRETA REVELADA");
+    }
+    sfx.item();
   }
 
   function checkBoards() {
@@ -315,7 +474,7 @@
   function answerQuiz(ok) {
     if (!quizCur || quizCur.answered) return;
     quizCur.answered = true; quizCur.b.done = true;
-    if (ok) { score += 300; if (lives < 3) lives++; sfx.good(); quizUi.msg.textContent = "ACERTOU! +300 PONTOS"; }
+    if (ok) { awardPoints(300); if (lives < maxLives) lives++; sfx.good(); quizUi.msg.textContent = "ACERTOU! +300 PONTOS"; }
     else { sfx.bad(); quizUi.msg.textContent = "ERROU! Mais sorte na próxima lousa."; }
     setTimeout(() => {
       quizUi.screen.classList.add("hidden");
@@ -323,17 +482,95 @@
     }, 1000);
   }
 
+  function loadProfile() {
+    try {
+      const saved = JSON.parse(localStorage.getItem("escola_progress_v2"));
+      if (saved && Array.isArray(saved.completed)) return { ...profile, ...saved };
+    } catch (e) {}
+    return profile;
+  }
+
+  function saveProfile() {
+    try { localStorage.setItem("escola_progress_v2", JSON.stringify(profile)); } catch (e) {}
+  }
+
+  function renderMenu() {
+    ui.levelSelect.innerHTML = "";
+    LEVELS.forEach((level, index) => {
+      const button = document.createElement("button");
+      const locked = index >= profile.unlocked;
+      button.className = `level-card${selectedLevel === index ? " selected" : ""}`;
+      button.disabled = locked;
+      const completed = profile.completed.includes(index);
+      const record = profile.records[index];
+      const phaseRecord = record ? `${String(record.bestScore).padStart(4, "0")} PTS · ${Number.isFinite(record.bestTime) ? formatTime(record.bestTime) : "--:--"}` : `${level.targetCoins} MOEDAS · ${formatTime(level.timeLimit)}`;
+      button.title = record ? `Melhor pontuação ${record.bestScore}; melhor tempo ${formatTime(record.bestTime)}` : `Missão: ${level.targetCoins} moedas em até ${formatTime(level.timeLimit)}`;
+      button.innerHTML = `${locked ? "🔒 " : completed ? "✓ " : ""}${index + 1}. ${level.name}<small>${"★".repeat(profile.stars[index] || 0)}${"☆".repeat(3 - (profile.stars[index] || 0))}<br>${phaseRecord}</small>`;
+      button.onclick = () => { selectedLevel = index; renderMenu(); };
+      ui.levelSelect.appendChild(button);
+    });
+    ui.characterSelect.innerHTML = "";
+    CHARACTERS.forEach(character => {
+      const button = document.createElement("button");
+      button.className = `character-option${selectedCharacter === character.id ? " selected" : ""}`;
+      button.textContent = character.name;
+      button.title = `Velocidade ${character.speed.toFixed(1)} · pulo ${character.jump.toFixed(1)} · ${character.lives} vidas`;
+      button.onclick = () => { selectedCharacter = character.id; renderMenu(); };
+      ui.characterSelect.appendChild(button);
+    });
+    document.getElementById("hardMode").checked = hardMode;
+    const bestCampaign = Number.isFinite(profile.bestCampaignTime) ? ` · MELHOR TEMPO ${formatTime(profile.bestCampaignTime)}` : "";
+    ui.progressSummary.textContent = `FASES ${profile.completed.length}/${LEVELS.length} · MELHOR PONTUAÇÃO ${String(getBest()).padStart(4, "0")}${bestCampaign}`;
+    document.getElementById("startBtn").textContent = selectedLevel === LEVELS.length - 1 ? "ENFRENTAR DESAFIO" : "INICIAR AULA";
+  }
+
   function getBest() { try { return +localStorage.getItem("escola_best") || 0; } catch (e) { return 0; } }
-  function saveBest() { try { if (score > getBest()) localStorage.setItem("escola_best", score); } catch (e) {} refreshBest(); }
-  function refreshBest() { document.querySelectorAll(".best").forEach(el => el.textContent = String(getBest()).padStart(4, "0")); }
+  function saveBest() {
+    const record = profile.records[levelIndex] || { bestScore: 0, bestTime: null };
+    record.bestScore = Math.max(record.bestScore, score - levelStartScore);
+    record.bestTime = Number.isFinite(record.bestTime) ? Math.min(record.bestTime, elapsed) : elapsed;
+    profile.records[levelIndex] = record;
+    if (score > getBest()) { try { localStorage.setItem("escola_best", score); } catch (e) {} }
+    saveProfile();
+    refreshBest();
+  }
+  function refreshBest() {
+    document.querySelectorAll(".best").forEach(el => el.textContent = String(getBest()).padStart(4, "0"));
+    if (ui.levelSelect) renderMenu();
+  }
+  profile = loadProfile();
   refreshBest();
 
   function drawItems() {
     for (const it of items) {
       if (it.taken) continue;
       const bob = Math.round(Math.sin(elapsed * 4 + it.x) * 3);
-      if (it.type === "apple") sprite(APPLE, { "#": "#5a1a10", r: "#e03030", R: "#ff9a9a", g: "#3f9a45" }, it.x - 16, it.y - 16 + bob, 4);
-      else sprite(BELL, { "#": "#5a3a00", Y: "#ffd93b", W: "#fff3a0" }, it.x - 18, it.y - 16 + bob, 4);
+      const colors = { jelly: "#e64a4a", energy: "#40b9d7", shoes: "#e5cf53", shield: "#54a8e0", star: "#ffd43b", clock: "#a47bd1", backpack: "#4f9c62" };
+      box(it.x - 15, it.y - 15 + bob, 30, 30, colors[it.type] || "#ffd93b");
+      ctx.fillStyle = "#fff"; ctx.font = "bold 16px 'Courier New', monospace"; ctx.textAlign = "center";
+      ctx.fillText(({ jelly: "+", energy: "E", shoes: "T", shield: "S", star: "★", clock: "◷", backpack: "M" })[it.type], it.x, it.y + 6 + bob);
+    }
+  }
+
+  function drawCollectibles() {
+    for (const item of collectibles) {
+      if (item.collected || item.hidden) continue;
+      const symbols = { book: "L", medal: "M", key: "K", secret: "?" };
+      const colors = { book: "#4a86bd", medal: "#e2b942", key: "#d5a33d", secret: "#ce76c3" };
+      box(item.x - 12, item.y - 16, 24, 30, colors[item.type]);
+      ctx.fillStyle = "#fff"; ctx.font = "bold 18px 'Courier New', monospace"; ctx.textAlign = "center";
+      ctx.fillText(symbols[item.type], item.x, item.y + 6);
+    }
+  }
+
+  function drawInteractables() {
+    for (const item of interactables) {
+      if (item.type === "crate" || item.type === "door") continue;
+      if (item.type === "secret" && levelIndex === 4 && !item.active) continue;
+      const color = item.type === "lever" ? (item.active ? "#58cf77" : "#e2b942") : item.type === "button" ? "#e75b59" : "#bb78ce";
+      box(item.x, item.y, item.w, item.h, color);
+      ctx.fillStyle = "#fff"; ctx.font = "bold 12px 'Courier New', monospace"; ctx.textAlign = "center";
+      ctx.fillText(item.type === "lever" ? "E" : item.type === "button" ? "!" : "?", item.x + item.w / 2, item.y - 6);
     }
   }
 
@@ -351,12 +588,40 @@
     ui.score.textContent = String(score).padStart(4, "0");
     ui.lives.textContent = lives > 0 ? "♥ ".repeat(lives).trim() : "—";
     ui.time.textContent = formatTime(elapsed);
+    ui.objective.textContent = `MOEDAS ${coinCount}/${LEVELS[levelIndex].targetCoins} · LIVROS ${mission.books}/1`;
+    ui.inventory.textContent = inventory.length ? `${itemName(inventory[0])}${inventory.length > 1 ? ` +${inventory.length - 1}` : ""}` : "VAZIO";
   }
 
   function startGame() {
+    if (selectedLevel >= profile.unlocked) return;
+    levelIndex = selectedLevel;
     resetGame();
     lastTime = performance.now();
+    requestGameLoop();
+  }
+
+  function requestGameLoop() {
+    if (loopRunning) return;
+    loopRunning = true;
     requestAnimationFrame(loop);
+  }
+
+  function nextLevel() {
+    if (levelIndex >= LEVELS.length - 1) return showMap();
+    levelIndex += 1;
+    selectedLevel = levelIndex;
+    resetGame(true);
+    lastTime = performance.now();
+    hideAllOverlays();
+    renderMenu();
+  }
+
+  function showMap() {
+    state = "menu";
+    hideAllOverlays();
+    ui.start.classList.remove("hidden");
+    renderMenu();
+    draw();
   }
 
   function togglePause() {
@@ -392,6 +657,8 @@
 
     if (k === "ArrowUp" || k === "w" || k === " ") queueJump();
     if (k === "p" || k === "P") togglePause();
+    if (k === "e" || k === "E") interact();
+    if (k === "q" || k === "Q") useItem();
   });
 
   window.addEventListener("keyup", (e) => {
@@ -421,10 +688,17 @@
     queueJump();
   });
 
+  document.getElementById("interactBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); interact(); });
+  document.getElementById("itemBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); useItem(); });
+
   document.getElementById("startBtn").addEventListener("click", startGame);
   document.getElementById("resumeBtn").addEventListener("click", togglePause);
   document.getElementById("restartBtn").addEventListener("click", startGame);
   document.getElementById("playAgainBtn").addEventListener("click", startGame);
+  document.getElementById("nextLevelBtn").addEventListener("click", nextLevel);
+  document.getElementById("winMapBtn").addEventListener("click", showMap);
+  document.getElementById("pauseMapBtn").addEventListener("click", showMap);
+  document.getElementById("hardMode").addEventListener("change", e => { hardMode = e.target.checked; renderMenu(); });
 
   function update(dt) {
     if (state !== "playing") return;
@@ -434,6 +708,17 @@
     flashTimer = Math.max(0, flashTimer - dt);
     shakeTimer = Math.max(0, shakeTimer - dt);
     player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
+    Object.keys(effects).forEach(key => { effects[key] = Math.max(0, effects[key] - dt); });
+    if (hardMode && elapsed > LEVELS[levelIndex].timeLimit * 0.75) {
+      state = "gameover";
+      ui.overTitle.textContent = "Tempo esgotado";
+      ui.overMessage.textContent = "O limite de tempo do Hard Mode foi atingido.";
+      saveBest();
+      ui.overScore.textContent = String(score).padStart(4, "0");
+      ui.overTime.textContent = formatTime(elapsed);
+      ui.gameOver.classList.remove("hidden");
+      return;
+    }
 
     if (respawnTimer > 0) {
       respawnTimer -= dt;
@@ -455,7 +740,8 @@
 
     if (axis !== 0) {
       player.vx += axis * acceleration;
-      player.vx = clamp(player.vx, -player.speed, player.speed);
+      const speedLimit = player.speed * (effects.energy > 0 ? 1.55 : 1);
+      player.vx = clamp(player.vx, -speedLimit, speedLimit);
       player.facing = axis;
       player.anim += dt * (8 + Math.abs(player.vx));
     } else {
@@ -471,7 +757,7 @@
       const canJumpOnGround = player.coyote > 0 && player.jumpsUsed < player.maxJumps;
       const canDoubleJump = !player.grounded && player.jumpsUsed < player.maxJumps && player.jumpsUsed > 0;
       if (canJumpOnGround || canDoubleJump) {
-        player.vy = -player.jump;
+        player.vy = -player.jump * (effects.shoes > 0 ? 1.35 : 1);
         player.grounded = false;
         player.coyote = 0;
         player.jumpBuffer = 0;
@@ -489,10 +775,12 @@
     player.vy = Math.min(player.vy, 18);
 
     bellTimer = Math.max(0, bellTimer - dt);
+    updateMovingPlatforms(dt);
     movePlayer(dt);
     if (player.grounded) combo = 0;
     updateEnemies(dt);
     collectCoins();
+    collectCollectibles();
     collectItems();
     checkBoards();
     updateCheckpoints();
@@ -512,11 +800,13 @@
     const previousBottom = player.y + player.h;
     player.y += player.vy * 60 * dt;
     player.grounded = false;
+    player.standingOn = null;
 
     // Colisão vertical com plataformas
     if (player.vy >= 0) {
       let best = null;
       for (const p of platforms) {
+        if (p.open || (p.type === "secret" && !p.revealed)) continue;
         const horizontal = player.x + player.w > p.x && player.x < p.x + p.w;
         const crossed = previousBottom <= p.y && player.y + player.h >= p.y;
         if (horizontal && crossed && (!best || p.y < best.y)) best = p;
@@ -525,10 +815,12 @@
         player.y = best.y - player.h;
         player.vy = 0;
         player.grounded = true;
+        player.standingOn = best;
         player.jumpsUsed = 0;
       }
     } else {
       for (const p of platforms) {
+        if (p.open || (p.type === "secret" && !p.revealed)) continue;
         const horizontal = player.x + player.w > p.x && player.x < p.x + p.w;
         const crossed = player.y <= p.y + p.h && player.y + player.h >= p.y + p.h;
         if (horizontal && crossed) {
@@ -540,6 +832,7 @@
 
     // Colisão lateral simples com plataformas
     for (const p of platforms) {
+      if (p.open || (p.type === "secret" && !p.revealed)) continue;
       if (player.y + player.h <= p.y + 8 || player.y >= p.y + p.h - 8) continue;
       if (!rectsOverlap(player, p)) continue;
 
@@ -564,7 +857,10 @@
         continue;
       }
 
-      e.x += e.vx * 60 * dt * (bellTimer > 0 ? 0.3 : 1);
+      const slowFactor = effects.clock > 0 || bellTimer > 0 ? 0.3 : 1;
+      if (e.type === "inspector" && Math.abs(player.x - e.x) < 420) e.vx = Math.sign(player.x - e.x) * e.speed;
+      else if (e.type === "inspector") e.vx = Math.sign(e.vx || 1) * e.speed;
+      e.x += e.vx * 60 * dt * slowFactor * (hardMode ? 1.25 : 1);
       if (e.x <= e.minX) {
         e.x = e.minX;
         e.vx = Math.abs(e.speed);
@@ -573,10 +869,36 @@
         e.x = e.maxX;
         e.vx = -Math.abs(e.speed);
       }
-      e.phase += dt * 7 * (bellTimer > 0 ? 0.3 : 1);
+      e.phase += dt * 7 * slowFactor;
       if (e.type === "eraser") e.y = e.baseY - Math.abs(Math.sin(e.phase * 0.5)) * 55;
+      if (e.type === "boss") {
+        e.attackTimer -= dt;
+        if (e.attackTimer <= 0) {
+          const attackX = clamp(player.x + player.w / 2 - 28, 0, WORLD.width - 56);
+          addHazard(attackX, 618, 56, 32, "fire");
+          hazards[hazards.length - 1].ttl = 0.8;
+          e.attackTimer = hardMode ? 1.3 : 2.1;
+        }
+      }
+    }
+    hazards = hazards.filter(hazard => {
+      if (hazard.ttl === undefined) return true;
+      hazard.ttl -= dt;
+      return hazard.ttl > 0;
+    });
+  }
+
+  function updateMovingPlatforms(dt) {
+    for (const platform of platforms) {
+      if (platform.type !== "moving" || !platform.active) continue;
+      const previousX = platform.x;
+      platform.phase += dt * 1.6;
+      platform.x = platform.baseX + Math.sin(platform.phase) * platform.range;
+      if (player.grounded && player.standingOn === platform) player.x += platform.x - previousX;
     }
   }
+
+  function awardPoints(points) { score += Math.round(points * (effects.star > 0 ? 2 : 1)); }
 
   function collectCoins() {
     for (const c of coins) {
@@ -584,10 +906,24 @@
       const box = { x: c.x - c.r, y: c.y - c.r, w: c.r * 2, h: c.r * 2 };
       if (rectsOverlap(player, box)) {
         c.collected = true;
-        score += 100;
+        coinCount += 1;
+        awardPoints(100);
         sfx.coin();
         burst(c.x, c.y, "#ffd34d", 10);
       }
+    }
+  }
+
+  function collectCollectibles() {
+    for (const item of collectibles) {
+      if (item.collected || item.hidden) continue;
+      if (!rectsOverlap(player, { x: item.x - 14, y: item.y - 18, w: 28, h: 36 })) continue;
+      item.collected = true;
+      if (item.type === "book") { mission.books += 1; awardPoints(200); showScorePopup("LIVRO ENCONTRADO! +200"); }
+      if (item.type === "medal") { mission.medals += 1; awardPoints(500); showScorePopup("MEDALHA! +500"); }
+      if (item.type === "key") { keysCollected += 1; awardPoints(100); showScorePopup("CHAVE ENCONTRADA"); }
+      if (item.type === "secret") { mission.secrets += 1; awardPoints(300); showScorePopup("SEGREDO DESCOBERTO!"); }
+      sfx.coin();
     }
   }
 
@@ -597,7 +933,7 @@
         cp.reached = true;
         checkpointX = cp.x + 15;
         checkpointY = cp.y + 90;
-        score += 250;
+        awardPoints(250);
         sfx.item();
         finishBannerTimer = 1.4;
         burst(cp.x + 10, cp.y + 35, "#42d879", 18);
@@ -611,6 +947,7 @@
     for (const h of hazards) {
       const hitbox = { x: h.x + 4, y: h.y + 5, w: h.w - 8, h: h.h - 5 };
       if (rectsOverlap(player, hitbox)) {
+        if (effects.shield > 0) { effects.shield = 0; player.invincible = 0.8; showScorePopup("ESCUDO BLOQUEOU O PERIGO"); return; }
         loseLife();
         return;
       }
@@ -628,16 +965,26 @@
       const enemyTop = e.y;
 
       if (player.vy > 0 && playerBottom - enemyTop < 25) {
+        if (e.type === "boss") {
+          e.health -= 1;
+          player.y = e.y - player.h;
+          player.vy = -10;
+          if (e.health <= 0) { e.dead = true; awardPoints(1500); showScorePopup("CHEFE DERROTADO!"); }
+          else showScorePopup(`ACERTO! CHEFE ${e.health}/3`);
+          sfx.stomp();
+          continue;
+        }
         e.squashed = 0.42;
         player.y = e.y - player.h;
         player.vy = -8.5;
         combo++;
         const pts = 200 * Math.min(2 ** (combo - 1), 4);
-        score += pts;
+        awardPoints(pts);
         sfx.stomp();
         showScorePopup(`= ${pts} PONTOS` + (combo > 1 ? ` COMBO x${combo}!` : ""));
         burst(e.x + e.w / 2, e.y + e.h / 2, e.color, 12);
       } else {
+        if (effects.shield > 0) { effects.shield = 0; player.invincible = 0.8; continue; }
         loseLife();
         return;
       }
@@ -646,12 +993,14 @@
 
   function handleGoal() {
     if (!goal) return;
+    if (boss && !boss.dead) return;
     if (rectsOverlap(player, goal)) winGame();
   }
 
   function loseLife() {
     if (state !== "playing" || player.invincible > 0 || respawnTimer > 0) return;
 
+    mission.damageTaken = true;
     lives -= 1;
     sfx.hurt();
     flashTimer = 0.35;
@@ -673,12 +1022,44 @@
   function winGame() {
     if (state !== "playing") return;
     state = "won";
-    score += Math.max(0, 1000 - Math.floor(elapsed) * 5);
-    ui.winScore.textContent = String(score).padStart(4, "0");
-    ui.winTime.textContent = formatTime(elapsed);
-    const stars = 1 + (score >= 2500) + (score >= 4000);
-    ui.stars.textContent = "★".repeat(stars) + "☆".repeat(3 - stars);
+    const level = LEVELS[levelIndex];
+    const timeLimit = level.timeLimit * (hardMode ? 0.75 : 1);
+    awardPoints(Math.max(0, 800 - Math.floor(elapsed) * 4));
+    campaignTime += elapsed;
+    const coinsMet = coinCount >= level.targetCoins;
+    const timeMet = elapsed <= timeLimit;
+    const bookMet = mission.books > 0;
+    const secretMet = levelIndex !== 4 || mission.secrets > 0;
+    const noDamage = !mission.damageTaken;
+    const missionComplete = coinsMet && timeMet && bookMet && secretMet && noDamage;
+    const grade = missionComplete ?
+      (coinCount >= level.targetCoins + 4 && elapsed < timeLimit * 0.65 && mission.medals > 0 ? "S" : "A") :
+      (coinCount >= Math.ceil(level.targetCoins * 0.7) && bookMet ? "B" : "C");
+    const stars = grade === "S" ? 3 : grade === "A" ? 2 : grade === "B" ? 1 : 0;
+    const isFinal = levelIndex === LEVELS.length - 1;
+    if (!profile.completed.includes(levelIndex)) profile.completed.push(levelIndex);
+    profile.unlocked = Math.max(profile.unlocked, Math.min(LEVELS.length, levelIndex + 2));
+    profile.stars[levelIndex] = Math.max(profile.stars[levelIndex] || 0, stars);
+    const totalStars = Object.values(profile.stars).reduce((sum, count) => sum + count, 0);
+    const campaignGrade = totalStars >= 18 ? "S" : totalStars >= 12 ? "A" : totalStars >= 6 ? "B" : "C";
+    if (isFinal) {
+      const previousBest = Number(profile.bestCampaignTime);
+      profile.bestCampaignTime = Number.isFinite(previousBest) ? Math.min(previousBest, campaignTime) : campaignTime;
+    }
+    saveProfile();
     saveBest();
+    ui.winScore.textContent = String(score).padStart(4, "0");
+    ui.winTime.textContent = formatTime(isFinal ? campaignTime : elapsed);
+    ui.grade.textContent = isFinal ? campaignGrade : grade;
+    ui.mission.textContent = isFinal ? `CAMPANHA CONCLUÍDA · ${profile.completed.length}/${LEVELS.length} FASES · ${totalStars}/21 ESTRELAS` :
+      `MISSÃO ${missionComplete ? "CONCLUÍDA" : "PARCIAL"} · MOEDAS ${coinCount}/${level.targetCoins} · LIVROS ${mission.books} · ${mission.damageTaken ? "VIDA PERDIDA" : "SEM PERDAS"}`;
+    ui.stars.textContent = isFinal ? `${totalStars}/21 ★` : "★".repeat(stars) + "☆".repeat(3 - stars);
+    document.getElementById("nextLevelBtn").classList.toggle("hidden", isFinal);
+    document.getElementById("playAgainBtn").textContent = isFinal ? "REJOGAR DESAFIO FINAL" : "REJOGAR FASE";
+    ui.finalSummary.innerHTML = isFinal ? `<span class="campaign-total">TOTAL ${String(score).padStart(4, "0")} PTS<br>TEMPO ${formatTime(campaignTime)}<br>RECORDE ${formatTime(profile.bestCampaignTime)}</span>` + LEVELS.map((entry, index) => {
+      const record = profile.records[index];
+      return `<span>${entry.name}<br>${"★".repeat(profile.stars[index] || 0)}${"☆".repeat(3 - (profile.stars[index] || 0))}${record ? `<br>${String(record.bestScore).padStart(4, "0")} pts · ${formatTime(record.bestTime)}` : ""}</span>`;
+    }).join("") : "";
     sfx.win();
     ui.win.classList.remove("hidden");
     burst(goal.x + 20, goal.y + 40, "#ffd34d", 35);
@@ -787,10 +1168,13 @@
   }
 
   function drawWorld() {
+    drawStageProps();
     drawPlatforms();
     drawHazards();
+    drawInteractables();
     drawBoards();
     drawItems();
+    drawCollectibles();
     drawCoins();
     drawCheckpoints();
     drawEnemies();
@@ -799,12 +1183,58 @@
     drawParticles();
   }
 
+  function drawStageProps() {
+    const theme = LEVELS[levelIndex].theme;
+    for (let x = 100; x < WORLD.width; x += 620) {
+      if (theme === "classroom") {
+        box(x + 110, 520, 106, 13, "#a8643c");
+        px(x + 120, 533, 8, 44, "#4b3424"); px(x + 198, 533, 8, 44, "#4b3424");
+        box(x + 290, 548, 52, 10, "#6b4a2b"); px(x + 298, 558, 6, 26, "#4b3424");
+      } else if (theme === "corridor") {
+        for (let i = 0; i < 5; i++) {
+          box(x + 70 + i * 72, 350, 58, 180, i % 2 ? "#416d7a" : "#567b85");
+          px(x + 80 + i * 72, 375, 38, 3, "#d4d9cd"); px(x + 80 + i * 72, 408, 38, 3, "#d4d9cd");
+          px(x + 115 + i * 72, 435, 5, 5, "#f4c95d");
+        }
+      } else if (theme === "office") {
+        box(x + 100, 515, 150, 24, "#744c39"); px(x + 116, 539, 10, 70, "#493326"); px(x + 224, 539, 10, 70, "#493326");
+        box(x + 300, 420, 72, 118, "#9a5a42"); px(x + 312, 433, 48, 8, "#e2c36b"); px(x + 312, 455, 48, 5, "#e2c36b");
+      } else if (theme === "lab") {
+        box(x + 100, 525, 170, 18, "#5c7180"); px(x + 112, 543, 8, 60, "#344a56"); px(x + 250, 543, 8, 60, "#344a56");
+        ctx.fillStyle = "rgba(74, 209, 177, .7)"; ctx.fillRect(x + 132, 470, 32, 52);
+        ctx.fillStyle = "rgba(227, 96, 114, .72)"; ctx.fillRect(x + 184, 482, 26, 40);
+        box(x + 130, 466, 36, 6, "#dbe8e6"); box(x + 182, 478, 30, 6, "#dbe8e6");
+      } else if (theme === "library") {
+        box(x + 90, 310, 260, 220, "#6b4a2b");
+        for (let row = 0; row < 3; row++) {
+          px(x + 100, 365 + row * 54, 240, 7, "#a8643c");
+          for (let book = 0; book < 8; book++) px(x + 108 + book * 28, 326 + row * 54, 16, 38, ["#b43f36", "#d5a33d", "#326e62", "#426f9e"][book % 4]);
+        }
+      } else if (theme === "yard") {
+        px(x + 160, 355, 18, 160, "#704b2e"); px(x + 120, 330, 96, 80, "#478c4c");
+        px(x + 130, 300, 76, 62, "#5ca858"); box(x + 300, 535, 112, 14, "#9a5a42");
+      } else {
+        box(x + 90, 250, 30, 320, "#6b4a2b"); box(x + 350, 250, 30, 320, "#6b4a2b");
+        px(x + 145, 280, 160, 12, "#f4c95d"); px(x + 180, 292, 90, 48, "#9d3e35");
+        ctx.fillStyle = "#ffd93b"; ctx.font = "bold 24px 'Courier New', monospace"; ctx.textAlign = "center";
+        ctx.fillText("★", x + 225, 328);
+      }
+    }
+  }
+
   function drawPlatforms() {
     const T = 64;
     for (const p of platforms) {
-      if (p.type === "floating") {
+      if (p.open || (p.type === "secret" && !p.revealed)) continue;
+      if (p.type === "door") {
+        box(p.x, p.y, p.w, p.h, "#8a5a2b"); px(p.x + 6, p.y + 10, p.w - 12, p.h - 20, "#b8763f");
+        px(p.x + p.w - 10, p.y + p.h / 2, 4, 4, "#ffd93b");
+        continue;
+      }
+      if (p.type === "crate") { box(p.x, p.y, p.w, p.h, "#a8643c"); px(p.x + 6, p.y + 6, p.w - 12, 4, "#d2955b"); continue; }
+      if (p.type === "floating" || p.type === "moving" || p.type === "secret") {
         const red = ((p.x / 10) | 0) % 2 === 0;
-        box(p.x, p.y, p.w, 30, red ? "#d63a2f" : "#2f9a4a");
+        box(p.x, p.y, p.w, 30, p.type === "moving" ? "#3b82a0" : red ? "#d63a2f" : "#2f9a4a");
         px(p.x + 8, p.y + 8, p.w - 12, 14, "#f4efe0");
         px(p.x + 8, p.y + 14, p.w - 12, 2, "#cfc7ae");
         px(p.x + 2, p.y + 2, 6, 26, red ? "#a82a22" : "#217a38");
@@ -894,6 +1324,16 @@
         ctx.scale(1.18, 0.35);
         ctx.translate(-e.x - e.w / 2, -e.y - e.h);
       }
+      if (e.type === "boss") {
+        box(e.x, e.y + 12, e.w, e.h - 12, "#9d3e35");
+        px(e.x + 10, e.y, e.w - 20, 18, "#e2b942");
+        px(e.x + 20, e.y + 36, 14, 12, "#fff"); px(e.x + 60, e.y + 36, 14, 12, "#fff");
+        px(e.x + 25, e.y + 40, 6, 7, "#1b2330"); px(e.x + 65, e.y + 40, 6, 7, "#1b2330");
+        px(e.x + 28, e.y + 70, 38, 5, "#2a1a10");
+        box(e.x + 12, e.y - 14, 68, 7, "#2a1a10");
+        px(e.x + 14, e.y - 12, 64 * e.health / 3, 3, "#ef5c5c");
+        ctx.restore(); continue;
+      }
       if (e.type === "eraser") {
         box(e.x, e.y + 4, e.w, 34, "#f58ab0"); px(e.x, e.y + 26, e.w, 12, "#3b6fd0");
         px(e.x + 7, e.y + 11, 9, 8, "#fff"); px(e.x + 27, e.y + 11, 9, 8, "#fff");
@@ -910,8 +1350,9 @@
       }
       const step = Math.floor(elapsed * 8 + e.phase) % 2 ? 2 : 0;
       px(e.x + 6, e.y + 38 - step, 8, 4, "#2a1a10"); px(e.x + 28, e.y + 36 + step, 8, 4, "#2a1a10");
-      box(e.x, e.y, e.w, 38, "#f2a31b");
-      px(e.x + 3, e.y + 3, 4, 32, "#ffc85a");
+      const bodyColor = e.type === "robot" ? "#55a9b5" : e.type === "inspector" ? "#a34a39" : "#f2a31b";
+      box(e.x, e.y, e.w, 38, bodyColor);
+      px(e.x + 3, e.y + 3, 4, 32, e.type === "robot" ? "#a4eff0" : "#ffc85a");
       px(e.x + 17, e.y + 2, 10, 34, "#8d969c"); px(e.x + 20, e.y + 2, 3, 34, "#c9d0d4");
       px(e.x + 7, e.y + 10, 9, 8, "#fff"); px(e.x + 28, e.y + 10, 9, 8, "#fff");
       px(e.x + 11, e.y + 13, 4, 5, "#111"); px(e.x + 29, e.y + 13, 4, 5, "#111");
@@ -949,6 +1390,7 @@
     const running = player.grounded && Math.abs(player.vx) > .4;
     const leg = running ? Math.round(Math.sin(player.anim) * 5) : 0;
     const air = !player.grounded;
+    const shirt = selectedCharacter === "atleta" ? "#d94e47" : selectedCharacter === "inventora" ? "#3ca58b" : "#426f9e";
 
     ctx.save();
     ctx.translate(Math.round(player.x + player.w / 2), Math.round(player.y));
@@ -959,8 +1401,8 @@
     box(-12, 40, 10, 10 + l1, "#b7a26a"); box(2, 40, 10, 10 + l2, "#b7a26a");
     px(-14, 49 + l1, 14, 5, "#1f1f1f"); px(0, 49 + l2, 14, 5, "#1f1f1f");
     box(-22, 24, 9, 16, "#6b4a2b");
-    box(-14, 22, 28, 19, "#2f6fd0");
-    px(-14, 22, 28, 3, "#5a97ee");
+    box(-14, 22, 28, 19, shirt);
+    px(-14, 22, 28, 3, "#9fd9cb");
     box(8, 25, 10, 7, "#f2c49b");
     box(-12, 6, 24, 17, "#f2c49b");
     px(-14, -2, 28, 9, "#8a5a2b"); px(-14, 3, 7, 11, "#8a5a2b"); px(4, 0, 10, 4, "#a8703a");
@@ -987,7 +1429,7 @@
 
     if (state === "playing" || state === "paused" || state === "gameover" || state === "won" || state === "quiz") {
       requestAnimationFrame(loop);
-    }
+    } else loopRunning = false;
   }
 
   // Tela inicial já renderiza o cenário parado.

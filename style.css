@@ -350,3 +350,60 @@ html, body, button { font-family: "Courier New", Courier, monospace; }
 #quizMsg { min-height: 24px; margin: 0 auto; color: #ffd93b; font-weight: 900; }
 #winStars { font-size: 56px; color: #ffd93b; letter-spacing: 8px; text-shadow: 3px 3px #14301f; }
 .best-line { margin: 0 0 16px; color: #ffd93b; font-weight: 900; letter-spacing: 2px; }
+
+.start-panel {
+  width: min(900px, 96%);
+  max-height: 94%;
+  overflow: auto;
+  padding: 22px 28px;
+}
+.start-panel h1 { margin: 4px 0; font-size: 38px; }
+.start-panel > p { margin-bottom: 12px; }
+.menu-heading { margin: 10px 0 8px; font-size: 18px !important; }
+.level-select { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.level-card, .character-option {
+  min-width: 0; border: 3px solid #3b2a18; color: #f4f7ee; background: #315a42;
+  box-shadow: 0 3px #3b2a18; font: inherit; font-weight: 900; cursor: pointer;
+}
+.level-card { min-height: 62px; padding: 5px; font-size: 12px; line-height: 1.2; }
+.level-card small { display: block; margin-top: 3px; color: #ffd93b; font-size: 10px; line-height: 1.25; }
+.level-card.selected, .character-option.selected { background: #a8643c; border-color: #ffd93b; }
+.level-card:disabled { color: #8c9489; background: #343c35; cursor: not-allowed; box-shadow: none; opacity: .72; }
+.setup-row { display: flex; align-items: end; justify-content: space-between; gap: 14px; margin: 12px 0 8px; }
+.setup-group { display: grid; gap: 5px; text-align: left; }
+.setup-label { font-size: 11px; color: #ffd93b; font-weight: 900; }
+.character-select { display: flex; gap: 5px; }
+.character-option { padding: 6px 10px; font-size: 11px; }
+.hard-toggle { display: flex; align-items: center; gap: 7px; color: #ffb166; font-size: 12px; font-weight: 900; }
+.hard-toggle input { width: 18px; height: 18px; accent-color: #ef5c5c; }
+.start-panel .instructions { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 8px 0 10px; padding: 9px 12px; font-size: 11px; }
+#progressSummary { margin: 3px 0 8px; font-size: 12px; }
+.secondary-btn { display: inline-block; margin: 5px; padding: 10px 16px; color: #f4f7ee; background: #315a42; border: 3px solid #3b2a18; box-shadow: 0 4px #3b2a18; font: inherit; font-size: 12px; font-weight: 900; cursor: pointer; }
+.win-grade { margin: 6px 0; color: #ffd93b; font-size: 58px; font-weight: 900; text-shadow: 4px 4px #14301f; }
+.result-mission { margin: 4px auto 8px !important; }
+.final-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 8px auto; max-width: 650px; }
+.final-summary span { padding: 4px; color: #e2ecd9; background: rgba(0,0,0,.2); font-size: 10px; }
+.final-summary .campaign-total { color: #ffd93b; font-weight: 900; }
+#winScreen { display: block; overflow-y: auto; }
+#winScreen .panel { margin: 20px auto; }
+.objective-box strong, .inventory-box strong { font-size: 14px; }
+.action-controls { position: absolute; left: 50%; transform: translateX(-50%); }
+
+@media (max-width: 800px), (pointer: coarse) {
+  .start-panel { max-height: 96%; padding: 16px 14px; }
+  .start-panel h1 { font-size: 28px; }
+  .level-select { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .level-card { min-height: 62px; }
+  .setup-row { align-items: start; flex-direction: column; gap: 8px; }
+  .start-panel .instructions { gap: 5px; font-size: 10px; }
+  #hud { gap: 7px; padding: 7px 8px; }
+  .objective-box, .inventory-box { display: block; margin-left: 0 !important; }
+  .objective-box span, .inventory-box span { display: none; }
+  .objective-box strong, .inventory-box strong { font-size: 9px; letter-spacing: 0; }
+  .hud-box span, .hud-box strong { letter-spacing: 0; }
+  #controls { left: 10px; right: 10px; bottom: 10px; }
+  #controls > .control-group:first-child .control-btn, #controls > .control-btn { width: 48px; height: 48px; }
+  .action-controls { left: 50%; bottom: 0; }
+  .action-controls .control-btn { width: 38px; height: 38px; font-size: 14px; }
+  .final-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
