@@ -105,6 +105,8 @@
   let enemies = [];
   let checkpoints = [];
   let boss = null;
+  let bossArena = null;
+  let mech = { t: 0, wind: 0, windTimer: 6, dark: false, books: [], bookTimer: 3 };
   let goal = null;
   let particles = [];
 
@@ -179,6 +181,7 @@
     enemies = [];
     checkpoints = [];
     boss = null;
+    bossArena = null;
     particles = [];
 
     // Chão e plataformas principais
@@ -216,6 +219,8 @@
       [[675, 620, 90, 30, "spikes"], [1095, 620, 105, 30, "fire"], [1710, 610, 110, 40, "barrier"], [2170, 610, 120, 40, "rock"], [2870, 620, 120, 30, "fire"], [3780, 610, 130, 40, "spikes"]]
     ];
     hazardSets[levelIndex].forEach(([x, y, w, h, type]) => addHazard(x, y, w, h, type));
+    mech = { t: 0, wind: 0, windTimer: 6, dark: false, books: [], bookTimer: 3 };
+    if (levelIndex === 3) [1250, 2800, 3500, 4250].forEach((x, i) => { addHazard(x, 620, 110, 30, "acid"); hazards[hazards.length - 1].offset = i * 1.0; });
     if (hardMode) addHazard(4940, 620, 75, 30, "spikes");
 
     // Moedas distribuídas pela fase
@@ -245,9 +250,15 @@
 
     if (levelIndex === LEVELS.length - 1) {
       enemies = [];
-      addEnemy(4650, 550, 4440, 4860, 1.1, "#a93d34", "boss");
-      Object.assign(enemies[0], { w: 92, h: 100, health: 3, attackTimer: 2 });
+      bossArena = { left: 4420, right: 5160, entered: false, locked: false };
+      addEnemy(4650, 550, 4540, 5000, 1.1, "#a93d34", "boss");
+      Object.assign(enemies[0], { w: 92, h: 100, health: 4, maxHealth: 4, attackTimer: 2, double: true, finalTeacher: true });
       boss = enemies[0];
+    } else if (levelIndex === 2) {
+      // Chefe: o Diretor (precisa ser derrotado para liberar a saída)
+      addEnemy(4650, 550, 4440, 4860, 0.9, "#3b4a6b", "boss");
+      boss = enemies[enemies.length - 1];
+      Object.assign(boss, { w: 92, h: 100, health: 3, maxHealth: 3, attackTimer: 2.6, director: true });
     }
 
     // Checkpoints
@@ -297,8 +308,16 @@
     hideAllOverlays();
   }
 
+  function setShellBlur(enabled) {
+    const canvasEl = document.getElementById("gameCanvas");
+    const hudEl = document.getElementById("hud");
+    canvasEl.classList.toggle("blurred", enabled);
+    hudEl.classList.toggle("blurred", enabled);
+  }
+
   function hideAllOverlays() {
     [ui.start, ui.pause, ui.gameOver, ui.win, quizUi.screen].forEach(el => el.classList.add("hidden"));
+    setShellBlur(false);
   }
 
   const popup = document.getElementById("scorePopup");
@@ -373,13 +392,20 @@
     platforms.push(door, crate);
     interactables = [lever, button, door, crate, { x: 3010, y: 455, w: 28, h: 38, type: "secret", active: false }];
 
-    const bank = [...QUIZ].sort(() => Math.random() - 0.5);
+    const subj = (window.LEVEL_SUBJECTS || [])[levelIndex];
+    const B = window.QUIZ_BANK;
+    let pool = QUIZ, subjName = "GERAL";
+    if (B) {
+      if (subj === "mix" || !B[subj]) { pool = Object.values(B).flatMap(m => m.q); subjName = "MISTO"; }
+      else { pool = B[subj].q; subjName = B[subj].nome; }
+    }
+    const bank = [...pool].sort(() => Math.random() - 0.5);
     boards = [
       { x: 1275, y: 566 },
       { x: 2050, y: 566 },
       { x: 2440, y: 436 },
       { x: 4230, y: 416 }
-    ].map(({ x, y }, i) => ({ x, y, w: 110, h: 84, q: bank[i], done: false }));
+    ].map(({ x, y }, i) => ({ x, y, w: 110, h: 84, q: bank[i], subject: subjName, done: false }));
     combo = 0; bellTimer = 0;
   }
 
@@ -461,23 +487,71 @@
     const [q, opts, ok] = b.q;
     const list = opts.map((t, i) => ({ t, ok: i === ok })).sort(() => Math.random() - 0.5);
     quizCur = { b, list, answered: false };
+    const bd = quizUi.screen.querySelector(".badge"); if (bd) bd.textContent = "LOUSA · " + (b.subject || "GERAL");
     quizUi.q.textContent = q; quizUi.msg.textContent = ""; quizUi.opts.innerHTML = "";
     list.forEach((o, i) => {
       const bt = document.createElement("button");
       bt.className = "main-btn quiz-opt"; bt.textContent = `${i + 1}) ${o.t}`;
       bt.onclick = () => answerQuiz(o.ok);
+      o.bt = bt;
       quizUi.opts.appendChild(bt);
     });
+    const hb = document.createElement("button");
+    hb.className = "secondary-btn"; hb.textContent = "DICA (H) · -100 PONTOS";
+    hb.onclick = hintQuiz; quizCur.hintBtn = hb;
+    quizUi.opts.appendChild(hb);
     quizUi.screen.classList.remove("hidden");
+    setShellBlur(true);
+  }
+
+  function hintQuiz() {
+    if (!quizCur || quizCur.answered || quizCur.hinted) return;
+    if (score < 100) { quizUi.msg.textContent = "PRECISA DE 100 PONTOS PARA A DICA"; return; }
+    const wrong = quizCur.list.filter(o => !o.ok && !o.gone);
+    if (wrong.length < 2) return;
+    const o = wrong[0];
+    o.gone = true; o.bt.disabled = true; o.bt.style.opacity = ".3"; o.bt.style.textDecoration = "line-through";
+    quizCur.hinted = true; quizCur.hintBtn.disabled = true;
+    score -= 100; updateHud(); sfx.item();
+    quizUi.msg.textContent = "UMA RESPOSTA ERRADA FOI ELIMINADA";
+  }
+
+  function quizConsequence(ok, b) {
+    if (boss && !boss.dead) {
+      if (ok && boss.health > 1) {
+        boss.health -= 1;
+        return ` · CHEFE ENFRAQUECIDO ${boss.health}/${boss.maxHealth || 3}! (o golpe final é pulando nele)`;
+      }
+      if (!ok) boss.attackTimer = 0;
+    }
+    if (ok) {
+      if (Math.random() < 0.3 && inventory.length < bagCapacity) {
+        const t = ["jelly", "energy", "shoes", "shield", "star", "clock"][Math.floor(Math.random() * 6)];
+        inventory.push(t); updateHud();
+        return ` · GANHOU ${itemName(t)}!`;
+      }
+      return "";
+    }
+    const p = player.standingOn;
+    if (p && p.w >= 140 && p.type !== "door") {
+      const left = player.x + player.w / 2 > p.x + p.w / 2;
+      const x = left ? p.x : p.x + p.w - 42;
+      addEnemy(x, p.y - 42, p.x, p.x + p.w - 42, 1.3, "#7a5cc4");
+      return " · UM INIMIGO APARECEU!";
+    }
+    elapsed += 5;
+    return " · -5 SEGUNDOS!";
   }
 
   function answerQuiz(ok) {
     if (!quizCur || quizCur.answered) return;
     quizCur.answered = true; quizCur.b.done = true;
-    if (ok) { awardPoints(300); if (lives < maxLives) lives++; sfx.good(); quizUi.msg.textContent = "ACERTOU! +300 PONTOS"; }
-    else { sfx.bad(); quizUi.msg.textContent = "ERROU! Mais sorte na próxima lousa."; }
+    const extra = quizConsequence(ok, quizCur.b);
+    if (ok) { awardPoints(300); if (lives < maxLives) lives++; sfx.good(); quizUi.msg.textContent = "ACERTOU! +300 PONTOS" + extra; }
+    else { sfx.bad(); quizUi.msg.textContent = "ERROU!" + extra; }
     setTimeout(() => {
       quizUi.screen.classList.add("hidden");
+      setShellBlur(false);
       if (state === "quiz") { state = "playing"; lastTime = performance.now(); showScorePopup(ok ? "= 300 PONTOS" : "SEM PONTOS"); }
     }, 1000);
   }
@@ -620,6 +694,7 @@
     state = "menu";
     hideAllOverlays();
     ui.start.classList.remove("hidden");
+    setShellBlur(true);
     renderMenu();
     draw();
   }
@@ -628,9 +703,11 @@
     if (state === "playing") {
       state = "paused";
       ui.pause.classList.remove("hidden");
+      setShellBlur(true);
     } else if (state === "paused") {
       state = "playing";
       ui.pause.classList.add("hidden");
+      setShellBlur(false);
       lastTime = performance.now();
     }
   }
@@ -653,7 +730,8 @@
       e.preventDefault();
     }
     keys[k] = true;
-    if (state === "quiz" && quizCur && "123".includes(k) && quizCur.list[+k - 1]) answerQuiz(quizCur.list[+k - 1].ok);
+    if (state === "quiz" && quizCur && "123".includes(k) && quizCur.list[+k - 1] && !quizCur.list[+k - 1].gone) answerQuiz(quizCur.list[+k - 1].ok);
+    if (state === "quiz" && (k === "h" || k === "H")) hintQuiz();
 
     if (k === "ArrowUp" || k === "w" || k === " ") queueJump();
     if (k === "p" || k === "P") togglePause();
@@ -717,6 +795,7 @@
       ui.overScore.textContent = String(score).padStart(4, "0");
       ui.overTime.textContent = formatTime(elapsed);
       ui.gameOver.classList.remove("hidden");
+      setShellBlur(true);
       return;
     }
 
@@ -778,6 +857,7 @@
     updateMovingPlatforms(dt);
     movePlayer(dt);
     if (player.grounded) combo = 0;
+    updateMechanic(dt);
     updateEnemies(dt);
     collectCoins();
     collectCollectibles();
@@ -796,6 +876,25 @@
   function movePlayer(dt) {
     player.x += player.vx * 60 * dt;
     player.x = clamp(player.x, 0, WORLD.width - player.w);
+
+    if (bossArena) {
+      if (!bossArena.entered && player.x + player.w >= bossArena.left) {
+        bossArena.entered = true;
+        bossArena.locked = true;
+        player.x = bossArena.left + 20;
+        checkpointX = bossArena.left + 50;
+        checkpointY = 650;
+        showScorePopup("ARENA FECHADA! DERROTE O PROFESSOR BREU");
+      }
+      if (bossArena.locked && player.x < bossArena.left + 20) {
+        player.x = bossArena.left + 20;
+        player.vx = 0;
+      }
+      if (player.x + player.w > bossArena.right - 20) {
+        player.x = bossArena.right - 20 - player.w;
+        player.vx = 0;
+      }
+    }
 
     const previousBottom = player.y + player.h;
     player.y += player.vy * 60 * dt;
@@ -875,8 +974,14 @@
         e.attackTimer -= dt;
         if (e.attackTimer <= 0) {
           const attackX = clamp(player.x + player.w / 2 - 28, 0, WORLD.width - 56);
-          addHazard(attackX, 618, 56, 32, "fire");
+          const attackType = e.finalTeacher ? "chalk" : "fire";
+          addHazard(attackX, 618, 56, 32, attackType);
           hazards[hazards.length - 1].ttl = 0.8;
+          if (e.double) {
+            const second = clamp(attackX + (Math.random() < 0.5 ? -140 : 140), 0, WORLD.width - 56);
+            addHazard(second, 618, 56, 32, attackType);
+            hazards[hazards.length - 1].ttl = 0.8;
+          }
           e.attackTimer = hardMode ? 1.3 : 2.1;
         }
       }
@@ -942,9 +1047,67 @@
     finishBannerTimer = Math.max(0, finishBannerTimer - 1 / 60);
   }
 
+  // Mecânica própria de cada fase: Corredor (luzes), Laboratório (ácido), Pátio (vento)
+  function updateMechanic(dt) {
+    mech.t += dt;
+    if (levelIndex === 1) {
+      const dark = mech.t % 9 > 6;
+      if (dark !== mech.dark) { mech.dark = dark; showScorePopup(dark ? "AS LUZES APAGARAM!" : "LUZES DE VOLTA"); }
+    }
+    if (levelIndex === 3) for (const h of hazards) if (h.type === "acid") h.off = (mech.t + h.offset) % 4 >= 2;
+    if (levelIndex === 4) {
+      mech.bookTimer -= dt;
+      if (mech.bookTimer <= 0) {
+        mech.books.push({ x: clamp(player.x + (Math.random() - 0.3) * 400, 0, WORLD.width - 40), y: -40, warn: 0.9 });
+        mech.bookTimer = hardMode ? 1.5 : 2.3;
+      }
+      mech.books = mech.books.filter(b => {
+        if (b.warn > 0) { b.warn -= dt; return true; }
+        b.y += 720 * dt;
+        if (player.invincible <= 0 && rectsOverlap(player, { x: b.x, y: b.y, w: 36, h: 26 })) {
+          if (effects.shield > 0) { effects.shield = 0; player.invincible = 0.8; showScorePopup("ESCUDO BLOQUEOU O LIVRO"); }
+          else loseLife();
+          return false;
+        }
+        return b.y < 720;
+      });
+    }
+    if (levelIndex === 5) {
+      mech.windTimer -= dt;
+      if (mech.windTimer <= 0) {
+        mech.wind = mech.wind ? 0 : (Math.random() < 0.5 ? -1 : 1);
+        mech.windTimer = mech.wind ? 2.5 : 6;
+        if (mech.wind) showScorePopup(mech.wind > 0 ? "VENTO FORTE →" : "← VENTO FORTE");
+      }
+      if (mech.wind) player.vx += mech.wind * 0.18 * dt * 60;
+    }
+  }
+
+  function drawMechanic() {
+    if (levelIndex === 1 && (mech.dark || (mech.t % 9 > 5.5 && Math.floor(mech.t * 10) % 2))) {
+      const sx = player.x - cameraX + player.w / 2, sy = player.y + player.h / 2;
+      const g = ctx.createRadialGradient(sx, sy, 60, sx, sy, 190);
+      g.addColorStop(0, "rgba(5,10,25,0)"); g.addColorStop(1, "rgba(5,10,25," + (mech.dark ? 0.94 : 0.3) + ")");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW.width, VIEW.height);
+    }
+    if (levelIndex === 4) for (const b of mech.books) {
+      const sx = b.x - cameraX;
+      if (b.warn > 0) {
+        ctx.fillStyle = "rgba(239,92,92," + (Math.floor(mech.t * 10) % 2 ? 0.25 : 0.1) + ")";
+        ctx.fillRect(sx - 4, 80, 44, 580);
+        px(sx + 14, 90, 8, 22, "#ef5c5c"); px(sx + 14, 118, 8, 8, "#ef5c5c");
+      } else box(sx, b.y, 36, 26, "#2f6fd0"), px(sx + 5, b.y + 8, 26, 3, "#f5fafc");
+    }
+    if (levelIndex === 5 && mech.wind) {
+      ctx.fillStyle = "rgba(255,255,255,.7)";
+      for (let i = 0; i < 14; i++) ctx.fillRect(((mech.t * 400 * mech.wind + i * 97) % VIEW.width + VIEW.width) % VIEW.width, 110 + (i * 53) % 520, 40, 3);
+    }
+  }
+
   function handleHazards() {
     if (player.invincible > 0) return;
     for (const h of hazards) {
+      if (h.off) continue;
       const hitbox = { x: h.x + 4, y: h.y + 5, w: h.w - 8, h: h.h - 5 };
       if (rectsOverlap(player, hitbox)) {
         if (effects.shield > 0) { effects.shield = 0; player.invincible = 0.8; showScorePopup("ESCUDO BLOQUEOU O PERIGO"); return; }
@@ -969,8 +1132,13 @@
           e.health -= 1;
           player.y = e.y - player.h;
           player.vy = -10;
-          if (e.health <= 0) { e.dead = true; awardPoints(1500); showScorePopup("CHEFE DERROTADO!"); }
-          else showScorePopup(`ACERTO! CHEFE ${e.health}/3`);
+          if (e.health <= 0) {
+            e.dead = true;
+            if (e.finalTeacher && bossArena) bossArena.locked = false;
+            awardPoints(1500);
+            showScorePopup(e.director ? "DIRETOR DERROTADO! SAÍDA LIBERADA" : e.finalTeacher ? "PROFESSOR BREU DERROTADO!" : "CHEFE DERROTADO!");
+          }
+          else showScorePopup(`ACERTO! CHEFE ${e.health}/${e.maxHealth || 3}`);
           sfx.stomp();
           continue;
         }
@@ -1013,6 +1181,7 @@
       ui.overScore.textContent = String(score).padStart(4, "0");
       ui.overTime.textContent = formatTime(elapsed);
       ui.gameOver.classList.remove("hidden");
+      setShellBlur(true);
     } else {
       respawnTimer = 0.45;
     }
@@ -1062,6 +1231,7 @@
     }).join("") : "";
     sfx.win();
     ui.win.classList.remove("hidden");
+    setShellBlur(true);
     burst(goal.x + 20, goal.y + 40, "#ffd34d", 35);
   }
 
@@ -1106,6 +1276,7 @@
     ctx.translate(-cameraX, 0);
     drawWorld();
     ctx.restore();
+    drawMechanic();
 
     if (flashTimer > 0) {
       ctx.fillStyle = `rgba(255, 75, 90, ${flashTimer * 0.28})`;
@@ -1169,6 +1340,7 @@
 
   function drawWorld() {
     drawStageProps();
+    drawBossArena();
     drawPlatforms();
     drawHazards();
     drawInteractables();
@@ -1181,6 +1353,33 @@
     drawGoal();
     drawPlayer();
     drawParticles();
+  }
+
+  function drawBossArena() {
+    if (!bossArena) return;
+
+    const { left, right, locked } = bossArena;
+    px(left + 20, 44, right - left - 40, 606, "#354b52");
+    for (let y = 88; y < 620; y += 54) {
+      px(left + 22, y, right - left - 44, 3, "#405960");
+      px(left + 170, y + 3, 3, 51, "#405960");
+      px(left + 430, y + 3, 3, 51, "#405960");
+    }
+    box(left - 12, 0, 32, 650, "#6b4a2b", "#3b2a18");
+    box(right - 20, 0, 32, 650, "#6b4a2b", "#3b2a18");
+    px(left + 20, 36, right - left - 40, 12, "#3b2a18");
+    ctx.fillStyle = "#f4c95d";
+    ctx.font = "bold 18px 'Courier New', monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("ARENA DO PROFESSOR BREU", (left + right) / 2, 76);
+
+    if (locked) {
+      px(left - 4, 0, 12, 650, "#9a7043");
+      for (let y = 8; y < 650; y += 42) {
+        px(left - 4, y, 12, 5, "#d8bd78");
+      }
+      px(left - 18, 310, 40, 12, "#d8bd78");
+    }
   }
 
   function drawStageProps() {
@@ -1269,6 +1468,21 @@
         px(h.x, h.y + 18, h.w, h.h - 18, "#2a2f8f"); px(h.x + 10, h.y + 8, h.w - 20, 12, "#2a2f8f");
         px(h.x + 20, h.y + 2, 24, 8, "#2a2f8f"); px(h.x + 14, h.y + 22, 16, 4, "#6a73e0");
         px(h.x + h.w - 34, h.y + 14, 10, 4, "#6a73e0");
+      } else if (h.type === "chalk") {
+        ctx.fillStyle = "rgba(214, 230, 220, .85)";
+        ctx.beginPath();
+        ctx.arc(h.x + 13, h.y + 22, 10, 0, Math.PI * 2);
+        ctx.arc(h.x + 27, h.y + 13, 13, 0, Math.PI * 2);
+        ctx.arc(h.x + 43, h.y + 21, 11, 0, Math.PI * 2);
+        ctx.fill();
+        px(h.x + 12, h.y + 19, 4, 3, "#fff");
+        px(h.x + 30, h.y + 10, 5, 3, "#fff");
+        px(h.x + 42, h.y + 18, 4, 3, "#fff");
+      } else if (h.type === "acid") {
+        const warn = h.off && (mech.t + h.offset) % 4 > 3.5 && Math.floor(mech.t * 12) % 2;
+        const top = h.off ? 20 : 6;
+        px(h.x, h.y + top, h.w, h.h - top, h.off ? (warn ? "#9dff6b" : "#3d7a3a") : "#7dff4a");
+        if (!h.off) for (let x = h.x + 8; x < h.x + h.w - 8; x += 24) px(x, h.y + 2, 8, 6, "#d6ffb0");
       } else if (h.type === "rock") {
         for (let x = h.x; x < h.x + h.w; x += 40) {
           box(x + 2, h.y, 34, 10, "#a8643c"); px(x + 6, h.y + 10, 4, h.h - 10, "#2a1a10"); px(x + 28, h.y + 10, 4, h.h - 10, "#2a1a10");
@@ -1325,13 +1539,50 @@
         ctx.translate(-e.x - e.w / 2, -e.y - e.h);
       }
       if (e.type === "boss") {
-        box(e.x, e.y + 12, e.w, e.h - 12, "#9d3e35");
-        px(e.x + 10, e.y, e.w - 20, 18, "#e2b942");
+        if (e.finalTeacher) {
+          ctx.fillStyle = "rgba(25, 38, 48, .28)";
+          ctx.beginPath();
+          ctx.ellipse(e.x + e.w / 2, e.y + e.h - 2, 48, 9, 0, 0, Math.PI * 2);
+          ctx.fill();
+          box(e.x + 6, e.y + 50, 80, 48, "#244b4b", "#172d38");
+          px(e.x + 28, e.y + 54, 36, 44, "#d7ddd1");
+          px(e.x + 42, e.y + 58, 9, 29, "#aa5860");
+          px(e.x + 24, e.y + 91, 18, 7, "#172d38");
+          px(e.x + 54, e.y + 91, 18, 7, "#172d38");
+          box(e.x + 14, e.y + 10, 64, 46, "#b8c5bd", "#263b42");
+          px(e.x + 18, e.y + 4, 16, 10, "#dce4dc");
+          px(e.x + 38, e.y + 1, 17, 12, "#dce4dc");
+          px(e.x + 60, e.y + 5, 15, 10, "#dce4dc");
+          px(e.x + 22, e.y + 24, 18, 5, "#263b42");
+          px(e.x + 52, e.y + 24, 18, 5, "#263b42");
+          px(e.x + 24, e.y + 31, 13, 11, "#8ce3dc");
+          px(e.x + 55, e.y + 31, 13, 11, "#8ce3dc");
+          px(e.x + 29, e.y + 33, 5, 7, "#172d38");
+          px(e.x + 59, e.y + 33, 5, 7, "#172d38");
+          px(e.x + 39, e.y + 46, 16, 3, "#6b3b45");
+          ctx.save();
+          ctx.translate(e.x + 79, e.y + 68);
+          ctx.rotate(-0.32);
+          box(-3, -26, 6, 38, "#d7bd78", "#604b34");
+          px(-4, -30, 8, 5, "#dce4dc");
+          ctx.restore();
+          box(e.x + 12, e.y - 14, 68, 7, "#172d38");
+          px(e.x + 14, e.y - 12, 64 * e.health / (e.maxHealth || 4), 3, "#73d8cb");
+          ctx.fillStyle = "#f5fafc";
+          ctx.font = "bold 9px 'Courier New', monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("PROFESSOR BREU", e.x + e.w / 2, e.y - 19);
+          ctx.restore();
+          continue;
+        }
+        box(e.x, e.y + 12, e.w, e.h - 12, e.director ? "#3b4a6b" : "#9d3e35");
+        px(e.x + 10, e.y, e.w - 20, 18, e.director ? "#d8d8d8" : "#e2b942");
+        if (e.director) { px(e.x + 38, e.y + 52, 16, 40, "#ef5c5c"); px(e.x + 16, e.y + 30, 24, 4, "#2a1a10"); px(e.x + 52, e.y + 30, 24, 4, "#2a1a10"); }
         px(e.x + 20, e.y + 36, 14, 12, "#fff"); px(e.x + 60, e.y + 36, 14, 12, "#fff");
         px(e.x + 25, e.y + 40, 6, 7, "#1b2330"); px(e.x + 65, e.y + 40, 6, 7, "#1b2330");
         px(e.x + 28, e.y + 70, 38, 5, "#2a1a10");
         box(e.x + 12, e.y - 14, 68, 7, "#2a1a10");
-        px(e.x + 14, e.y - 12, 64 * e.health / 3, 3, "#ef5c5c");
+        px(e.x + 14, e.y - 12, 64 * e.health / (e.maxHealth || 3), 3, "#ef5c5c");
         ctx.restore(); continue;
       }
       if (e.type === "eraser") {

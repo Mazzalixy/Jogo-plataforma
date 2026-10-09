@@ -43,6 +43,12 @@ body {
   border: 6px solid rgba(255,255,255,.28);
 }
 
+#gameCanvas.blurred,
+#hud.blurred {
+  filter: blur(8px) brightness(0.62) saturate(0.8);
+  transition: filter 200ms ease;
+}
+
 #game-shell::before {
   content: "";
   position: absolute;
